@@ -4249,12 +4249,15 @@ namespace Microsoft.EntityFrameworkCore.Specification.Tests
         {
             using (var context = CreateContext())
             {
-                TestHelpers.AssertResults(
-                    l2oQuery(ComplexNavigationsData.Set<TItem1>()).ToArray(),
-                    efQuery(context.Set<TItem1>()).ToArray(),
-                    elementSorter ?? (e => e),
-                    elementAsserter ?? ((e, a) => Assert.Equal(e, a)),
-                    verifyOrdered);
+                var actual = efQuery(context.Set<TItem1>()).ToArray();
+                var expected = l2oQuery(ComplexNavigationsData.Set<TItem1>()).ToArray();
+                new ResultsAsserter().AssertCollections(expected, actual);
+                //TestHelpers.AssertResults(
+                //    l2oQuery(ComplexNavigationsData.Set<TItem1>()).ToArray(),
+                //    efQuery(context.Set<TItem1>()).ToArray(),
+                //    elementSorter ?? (e => e),
+                //    elementAsserter ?? ((e, a) => Assert.Equal(e, a)),
+                //    verifyOrdered);
             }
         }
 
@@ -4278,12 +4281,16 @@ namespace Microsoft.EntityFrameworkCore.Specification.Tests
         {
             using (var context = CreateContext())
             {
-                TestHelpers.AssertResults(
-                    l2oQuery(ComplexNavigationsData.Set<TItem1>(), ComplexNavigationsData.Set<TItem2>()).ToArray(),
-                    efQuery(context.Set<TItem1>(), context.Set<TItem2>()).ToArray(),
-                    elementSorter ?? (e => e),
-                    elementAsserter ?? ((e, a) => Assert.Equal(e, a)),
-                    verifyOrdered);
+                var actual = efQuery(context.Set<TItem1>(), context.Set<TItem2>()).ToArray();
+                var expected = l2oQuery(ComplexNavigationsData.Set<TItem1>(), ComplexNavigationsData.Set<TItem2>()).ToArray();
+                new ResultsAsserter().AssertCollections(expected, actual);
+
+                //TestHelpers.AssertResults(
+                //    l2oQuery(ComplexNavigationsData.Set<TItem1>(), ComplexNavigationsData.Set<TItem2>()).ToArray(),
+                //    efQuery(context.Set<TItem1>(), context.Set<TItem2>()).ToArray(),
+                //    elementSorter ?? (e => e),
+                //    elementAsserter ?? ((e, a) => Assert.Equal(e, a)),
+                //    verifyOrdered);
             }
         }
 
@@ -4309,12 +4316,16 @@ namespace Microsoft.EntityFrameworkCore.Specification.Tests
         {
             using (var context = CreateContext())
             {
-                TestHelpers.AssertResults(
-                    l2oQuery(ComplexNavigationsData.Set<TItem1>(), ComplexNavigationsData.Set<TItem2>(), ComplexNavigationsData.Set<TItem3>()).ToArray(),
-                    efQuery(context.Set<TItem1>(), context.Set<TItem2>(), context.Set<TItem3>()).ToArray(),
-                    elementSorter ?? (e => e),
-                    elementAsserter ?? ((e, a) => Assert.Equal(e, a)),
-                    verifyOrdered);
+                var actual = efQuery(context.Set<TItem1>(), context.Set<TItem2>(), context.Set<TItem3>()).ToArray();
+                var expected = l2oQuery(ComplexNavigationsData.Set<TItem1>(), ComplexNavigationsData.Set<TItem2>(), ComplexNavigationsData.Set<TItem3>()).ToArray();
+                new ResultsAsserter().AssertCollections(expected, actual);
+
+                //TestHelpers.AssertResults(
+                //    l2oQuery(ComplexNavigationsData.Set<TItem1>(), ComplexNavigationsData.Set<TItem2>(), ComplexNavigationsData.Set<TItem3>()).ToArray(),
+                //    efQuery(context.Set<TItem1>(), context.Set<TItem2>(), context.Set<TItem3>()).ToArray(),
+                //    elementSorter ?? (e => e),
+                //    elementAsserter ?? ((e, a) => Assert.Equal(e, a)),
+                //    verifyOrdered);
             }
         }
 
@@ -4470,5 +4481,64 @@ namespace Microsoft.EntityFrameworkCore.Specification.Tests
         }
 
         #endregion
+
+        private class ResultsAsserter
+        {
+            public virtual bool AssertCollections<TElement>(IList<TElement> expected, IList<TElement> actual, bool verifyOrder = true)
+            {
+                if (expected == null && actual == null)
+                {
+                    return true;
+                }
+
+                if ((expected == null) != (actual == null))
+                {
+                    return false;
+                }
+
+                if (expected.Count != actual.Count)
+                {
+                    return false;
+                }
+
+                if (verifyOrder)
+                {
+                    for (int i = 0; i < expected.Count; i++)
+                    {
+                        var result = AssertElements(expected[i], actual[i]);
+                        if (!result)
+                        {
+                            return false;
+                        }
+                    }
+                }
+                else
+                {
+                    //todo
+                }
+
+                return true;
+            }
+
+            public virtual bool AssertElements<TElement>(TElement expected, TElement actual)
+            {
+                if (expected == null && actual == null)
+                {
+                    return true;
+                }
+
+                if ((expected == null) != (actual == null))
+                {
+                    return false;
+                }
+
+                if (expected.GetType() != actual.GetType())
+                {
+                    return false;
+                }
+
+                return expected.Equals(actual);
+            }
+        }
     }
 }
