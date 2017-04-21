@@ -643,8 +643,9 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
             switch (unaryExpression.NodeType)
             {
                 case ExpressionType.Convert:
-                    _stringBuilder.Append("(" + unaryExpression.Type.ShortDisplayName() + ") ");
+                    _stringBuilder.Append("((" + unaryExpression.Type.ShortDisplayName() + ")");
                     Visit(unaryExpression.Operand);
+                    _stringBuilder.Append(")");
                     break;
 
                 case ExpressionType.Throw:

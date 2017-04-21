@@ -297,6 +297,29 @@ namespace Microsoft.EntityFrameworkCore.Specification.Tests.TestModels.GearsOfWa
             context.Gears.Add(paduk);
 
             context.SaveChanges();
+            var karn = new LocustLeader { Name = "General Karn", ThreatLevel = 1 };
+            var raam = new LocustLeader { Name = "General RAAM", ThreatLevel = 4 };
+            var skorge = new LocustLeader { Name = "High Priest Skorge", ThreatLevel = 1 };
+            var myrrah = new LocustCommander { Name = "Queen Myrrah", ThreatLevel = 5, DefeatedBy = marcus };
+
+            var locust = new LocustHorde
+            {
+                Name = "Locust",
+                Commander = myrrah,
+                Leaders = new List<LocustLeader> { karn, raam, skorge, myrrah }
+
+            };
+
+            var theSpeaker = new LocustLeader { Name = "The Speaker", ThreatLevel = 3 };
+            var swarm = new LocustHorde
+            {
+                Name = "Swarm",
+                Leaders = new List<LocustLeader> { theSpeaker },
+            };
+
+            context.Factions.AddRange(locust, swarm);
+            context.LocustLeaders.AddRange(karn, raam, skorge, myrrah, theSpeaker);
+            context.SaveChanges();
         }
     }
 }

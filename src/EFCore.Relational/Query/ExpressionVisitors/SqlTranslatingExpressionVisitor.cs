@@ -577,8 +577,8 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors
             {
                 var arguments
                     = methodCallExpression.Arguments
-                        .Where(e => !(e is QuerySourceReferenceExpression)
-                                    && !(e is SubQueryExpression))
+                        .Where(e => !(e.RemoveConvert() is QuerySourceReferenceExpression)
+                                    && !(e.RemoveConvert() is SubQueryExpression))
                         .Select(e => (e as ConstantExpression)?.Value is Array || e.Type == typeof(DbFunctions)
                             ? e
                             : Visit(e))
@@ -634,8 +634,8 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors
         {
             Check.NotNull(memberExpression, nameof(memberExpression));
 
-            if (!(memberExpression.Expression is QuerySourceReferenceExpression)
-                && !(memberExpression.Expression is SubQueryExpression))
+            if (!(memberExpression.Expression.RemoveConvert() is QuerySourceReferenceExpression)
+                && !(memberExpression.Expression.RemoveConvert() is SubQueryExpression))
             {
                 var newExpression = Visit(memberExpression.Expression);
 

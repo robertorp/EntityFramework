@@ -432,8 +432,15 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
                                     node.Expression,
                                     node.Member.Name,
                                     node.Type,
-                                    e => Expression.MakeMemberAccess(e, node.Member),
-                                    e => new NullConditionalExpression(e, e, Expression.MakeMemberAccess(e, node.Member)));
+                                    e => node.Expression.Type != e.Type 
+                                        ? Expression.MakeMemberAccess(Expression.Convert(e, node.Expression.Type), node.Member)
+                                        : Expression.MakeMemberAccess(e, node.Member),
+                                    e => node.Expression.Type != e.Type
+                                        ? new NullConditionalExpression(
+                                            Expression.Convert(e, node.Expression.Type), 
+                                            Expression.Convert(e, node.Expression.Type), 
+                                            Expression.MakeMemberAccess(Expression.Convert(e, node.Expression.Type), node.Member))
+                                        : new NullConditionalExpression(e, e, Expression.MakeMemberAccess(e, node.Member)));
                             }
 
                             return null;
@@ -521,8 +528,15 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
                                     node.Arguments[0],
                                     (string)((ConstantExpression)node.Arguments[1]).Value,
                                     node.Type,
-                                    e => Expression.Call(node.Method, e, node.Arguments[1]),
-                                    e => new NullConditionalExpression(e, e, Expression.Call(node.Method, e, node.Arguments[1])));
+                                    e => node.Arguments[0].Type != e.Type
+                                        ? Expression.Call(node.Method, Expression.Convert(e, node.Arguments[0].Type), node.Arguments[1])
+                                        : Expression.Call(node.Method, e, node.Arguments[1]),
+                                    e => node.Arguments[0].Type != e.Type
+                                        ? new NullConditionalExpression(
+                                            Expression.Convert(e, node.Arguments[0].Type),
+                                            Expression.Convert(e, node.Arguments[0].Type), 
+                                            Expression.Call(node.Method, Expression.Convert(e, node.Arguments[0].Type), node.Arguments[1]))
+                                        : new NullConditionalExpression(e, e, Expression.Call(node.Method, e, node.Arguments[1])));
                             }
 
                             return null;
