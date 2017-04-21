@@ -2764,6 +2764,61 @@ namespace Microsoft.EntityFrameworkCore.Specification.Tests
             return gears.Where(g => g.Nickname == "Marcus" || g.Nickname == "Dom" || g.Nickname == "Cole Train" || g.Nickname == "Baird");
         }
 
+        [ConditionalFact]
+        public virtual void Member_access_on_derived_entity_using_cast()
+        {
+            using (var ctx = CreateContext())
+            {
+                var query = from f in ctx.Factions
+                            where f is LocustHorde
+                            select new { ((LocustHorde)f).Name, ((LocustHorde)f).Eradicated };
+
+                var result = query.ToList();
+            }
+        }
+
+        [ConditionalFact]
+        public virtual void Member_access_on_derived_entity_using_cast_and_let()
+        {
+            using (var ctx = CreateContext())
+            {
+                var query = from f in ctx.Factions
+                            where f is LocustHorde
+                            let horde = (LocustHorde)f
+                            select new { horde.Name, horde.Eradicated };
+
+                var result = query.ToList();
+            }
+        }
+
+        [ConditionalFact]
+        public virtual void Property_access_on_derived_entity_using_cast()
+        {
+            using (var ctx = CreateContext())
+            {
+                var query = from f in ctx.Factions
+                            where f is LocustHorde
+                            let horde = (LocustHorde)f
+                            select new { Name = EF.Property<string>(horde, "Name"), Defeated = EF.Property<bool>((LocustHorde)f, "Defeated") };
+
+                var result = query.ToList();
+            }
+        }
+
+        [ConditionalFact]
+        public virtual void Navigation_access_on_derived_entity_using_cast()
+        {
+            using (var ctx = CreateContext())
+            {
+                var query = from f in ctx.Factions
+                            where f is LocustHorde
+                            select new { f.Name, CommanderName = ((LocustHorde)f).Commander.Name };
+
+                var result = query.ToList();
+            }
+        }
+
+
         protected GearsOfWarContext CreateContext() => Fixture.CreateContext(TestStore);
 
         protected GearsOfWarQueryTestBase(TFixture fixture)

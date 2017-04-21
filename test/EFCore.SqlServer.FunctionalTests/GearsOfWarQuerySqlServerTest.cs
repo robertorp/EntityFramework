@@ -2631,6 +2631,38 @@ FROM [Weapon] AS [w]
 WHERE @_outer_FullName = [w].[OwnerFullName]");
         }
 
+        public override void Member_access_on_derived_entity_using_cast()
+        {
+            base.Member_access_on_derived_entity_using_cast();
+
+            AssertSql(
+                @"");
+        }
+
+        public override void Member_access_on_derived_entity_using_cast_and_let()
+        {
+            base.Member_access_on_derived_entity_using_cast_and_let();
+
+            AssertSql(
+                @"");
+        }
+
+        public override void Property_access_on_derived_entity_using_cast()
+        {
+            base.Property_access_on_derived_entity_using_cast();
+
+            AssertSql(
+                @"");
+        }
+
+        public override void Navigation_access_on_derived_entity_using_cast()
+        {
+            base.Navigation_access_on_derived_entity_using_cast();
+
+            AssertSql(
+                @"");
+        }
+
         protected override void ClearLog() => TestSqlLoggerFactory.Reset();
 
         private void AssertSql(params string[] expected)
