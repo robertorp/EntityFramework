@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Microsoft.EntityFrameworkCore.Specification.Tests.TestModels.ComplexNavigationsModel;
 using Microsoft.EntityFrameworkCore.Specification.Tests.TestUtilities.Xunit;
+using Microsoft.EntityFrameworkCore.Specification.TestUtilities;
 using Xunit;
 // ReSharper disable InconsistentNaming
 // ReSharper disable MergeConditionalExpression
@@ -27,11 +28,15 @@ namespace Microsoft.EntityFrameworkCore.Specification.Tests
             Fixture = fixture;
 
             TestStore = Fixture.CreateTestStore();
+
+            ResultAsserter = new ComplexNavigationsQueryResultAsserter();
         }
 
         protected TFixture Fixture { get; }
 
         protected TTestStore TestStore { get; }
+
+        protected QueryResultAsserter ResultAsserter { get; }
 
         protected virtual void ClearLog()
         {
@@ -176,70 +181,33 @@ namespace Microsoft.EntityFrameworkCore.Specification.Tests
         [ConditionalFact]
         public virtual void Multi_level_include_one_to_many_optional_and_one_to_many_optional_produces_valid_sql()
         {
-            using (var context = CreateContext())
+            var expectedIncludes = new List<IExpectedInclude>
             {
-                var expectedCount = context.LevelOne.Count();
+                new ExpectedInclude<Level1>(l1 => l1.OneToMany_Optional, "OneToMany_Optional"),
+                new ExpectedInclude<Level2>(l2 => l2.OneToMany_Optional, "OneToMany_Optional", navigationPath: "OneToMany_Optional")
+            };
 
-                ClearLog();
-
-                var result = context.LevelOne.Include(e => e.OneToMany_Optional).ThenInclude(e => e.OneToMany_Optional).ToList();
-
-                Assert.Equal(expectedCount, result.Count);
-
-                var level1 = result.Single(e => e.Name == "L1 01");
-
-                Assert.Equal(5, level1.OneToMany_Optional.Count);
-                Assert.True(level1.OneToMany_Optional.Select(e => e.Name).Contains("L2 02"));
-                Assert.True(level1.OneToMany_Optional.Select(e => e.Name).Contains("L2 04"));
-                Assert.True(level1.OneToMany_Optional.Select(e => e.Name).Contains("L2 06"));
-                Assert.True(level1.OneToMany_Optional.Select(e => e.Name).Contains("L2 08"));
-                Assert.True(level1.OneToMany_Optional.Select(e => e.Name).Contains("L2 10"));
-
-                var level2 = level1.OneToMany_Optional.Single(e => e.Name == "L2 02");
-
-                Assert.Equal(2, level2.OneToMany_Optional.Count);
-                Assert.True(level2.OneToMany_Optional.Select(e => e.Name).Contains("L3 04"));
-                Assert.True(level2.OneToMany_Optional.Select(e => e.Name).Contains("L3 08"));
-            }
+            AssertIncludeQuery<Level1>(
+                l1s => l1s.Include(e => e.OneToMany_Optional).ThenInclude(e => e.OneToMany_Optional),
+                expectedIncludes,
+                elementSorter: e => e.Id);
         }
 
         [ConditionalFact]
         public virtual void Multi_level_include_correct_PK_is_chosen_as_the_join_predicate_for_queries_that_join_same_table_multiple_times()
         {
-            using (var context = CreateContext())
+            var expectedIncludes = new List<IExpectedInclude>
             {
-                var expectedCount = context.LevelOne.Count();
+                new ExpectedInclude<Level1>(l1 => l1.OneToMany_Optional, "OneToMany_Optional"),
+                new ExpectedInclude<Level2>(l2 => l2.OneToMany_Optional, "OneToMany_Optional", navigationPath: "OneToMany_Optional"),
+                new ExpectedInclude<Level3>(l3 => l3.OneToMany_Required_Inverse, "OneToMany_Required_Inverse", navigationPath: "OneToMany_Optional.OneToMany_Optional"),
+                new ExpectedInclude<Level3>(l2 => l2.OneToMany_Optional, "OneToMany_Optional", navigationPath: "OneToMany_Optional.OneToMany_Optional.OneToMany_Required_Inverse"),
+            };
 
-                ClearLog();
-
-                var result = context.LevelOne.Include(e => e.OneToMany_Optional).ThenInclude(e => e.OneToMany_Optional).ThenInclude(e => e.OneToMany_Required_Inverse.OneToMany_Optional).ToList();
-
-                Assert.Equal(expectedCount, result.Count);
-
-                var level1 = result.Single(e => e.Name == "L1 01");
-
-                Assert.Equal(5, level1.OneToMany_Optional.Count);
-                Assert.True(level1.OneToMany_Optional.Select(e => e.Name).Contains("L2 02"));
-                Assert.True(level1.OneToMany_Optional.Select(e => e.Name).Contains("L2 04"));
-                Assert.True(level1.OneToMany_Optional.Select(e => e.Name).Contains("L2 06"));
-                Assert.True(level1.OneToMany_Optional.Select(e => e.Name).Contains("L2 08"));
-                Assert.True(level1.OneToMany_Optional.Select(e => e.Name).Contains("L2 10"));
-
-                var level2 = level1.OneToMany_Optional.Single(e => e.Name == "L2 02");
-
-                Assert.Equal(2, level2.OneToMany_Optional.Count);
-                Assert.True(level2.OneToMany_Optional.Select(e => e.Name).Contains("L3 04"));
-                Assert.True(level2.OneToMany_Optional.Select(e => e.Name).Contains("L3 08"));
-
-                Assert.True(level2.OneToMany_Optional.Select(e => e.OneToMany_Required_Inverse).All(e => e.Name == "L2 01"));
-
-                var level2Reverse = level2.OneToMany_Optional.Select(e => e.OneToMany_Required_Inverse).First();
-
-                Assert.Equal(3, level2Reverse.OneToMany_Optional.Count);
-                Assert.True(level2Reverse.OneToMany_Optional.Select(e => e.Name).Contains("L3 02"));
-                Assert.True(level2Reverse.OneToMany_Optional.Select(e => e.Name).Contains("L3 06"));
-                Assert.True(level2Reverse.OneToMany_Optional.Select(e => e.Name).Contains("L3 10"));
-            }
+            AssertIncludeQuery<Level1>(
+                l1s => l1s.Include(e => e.OneToMany_Optional).ThenInclude(e => e.OneToMany_Optional).ThenInclude(e => e.OneToMany_Required_Inverse.OneToMany_Optional),
+                expectedIncludes,
+                elementSorter: e => e.Id);
         }
 
         [ConditionalFact]
@@ -718,132 +686,183 @@ namespace Microsoft.EntityFrameworkCore.Specification.Tests
                   e => e.Id4 + " " + e.Name4 + " " + e.Id1 + " " + e.Name1);
         }
 
-        // issue #3180
         [ConditionalFact]
         public virtual void Multiple_complex_includes()
         {
-            List<Level1> levelOnes;
-            List<Level2> levelTwos;
-            using (var context = CreateContext())
+            var expectedIncludes = new List<IExpectedInclude>
             {
-                levelOnes = context.LevelOne
-                    .Include(e => e.OneToOne_Optional_FK)
-                    .Include(e => e.OneToMany_Optional).ToList();
+                new ExpectedInclude<Level1>(l1 => l1.OneToOne_Optional_FK, "OneToOne_Optional_FK"),
+                new ExpectedInclude<Level2>(l2 => l2.OneToMany_Optional, "OneToMany_Optional", navigationPath: "OneToOne_Optional_FK"),
+                new ExpectedInclude<Level1>(l1 => l1.OneToMany_Optional, "OneToMany_Optional"),
+                new ExpectedInclude<Level2>(l2 => l2.OneToOne_Optional_FK, "OneToOne_Optional_FK", navigationPath: "OneToMany_Optional")
+            };
 
-                levelTwos = context.LevelTwo
-                    .Include(e => e.OneToMany_Optional)
-                    .Include(e => e.OneToOne_Optional_FK).ToList();
-            }
-
-            ClearLog();
-
-            using (var context = CreateContext())
-            {
-                var query = context.LevelOne
+            AssertIncludeQuery<Level1>(
+                l1s => l1s
                     .Include(e => e.OneToOne_Optional_FK)
                     .ThenInclude(e => e.OneToMany_Optional)
                     .Include(e => e.OneToMany_Optional)
-                    .ThenInclude(e => e.OneToOne_Optional_FK);
+                    .ThenInclude(e => e.OneToOne_Optional_FK),
+                expectedIncludes,
+                elementSorter: e => e.Id);
 
-                var result = query.ToList();
+            //List<Level1> levelOnes;
+            //List<Level2> levelTwos;
+            //using (var context = CreateContext())
+            //{
+            //    levelOnes = context.LevelOne
+            //        .Include(e => e.OneToOne_Optional_FK)
+            //        .Include(e => e.OneToMany_Optional).ToList();
 
-                Assert.Equal(levelOnes.Count, result.Count);
-                foreach (var resultItem in result)
-                {
-                    var expectedLevel1 = levelOnes.Where(e => e.Id == resultItem.Id).Single();
-                    Assert.Equal(expectedLevel1.OneToOne_Optional_FK?.Id, resultItem.OneToOne_Optional_FK?.Id);
-                    Assert.Equal(expectedLevel1.OneToMany_Optional?.Count, resultItem.OneToMany_Optional?.Count);
+            //    levelTwos = context.LevelTwo
+            //        .Include(e => e.OneToMany_Optional)
+            //        .Include(e => e.OneToOne_Optional_FK).ToList();
+            //}
 
-                    var oneToOne_Optional_FK = resultItem.OneToOne_Optional_FK;
-                    if (oneToOne_Optional_FK != null)
-                    {
-                        var expectedReferenceLevel2 = levelTwos.Where(e => e.Id == oneToOne_Optional_FK.Id).Single();
-                        Assert.Equal(expectedReferenceLevel2.OneToMany_Optional?.Count, oneToOne_Optional_FK.OneToMany_Optional?.Count);
-                    }
-                }
-            }
+            //ClearLog();
+
+            //using (var context = CreateContext())
+            //{
+            //    var query = context.LevelOne
+            //        .Include(e => e.OneToOne_Optional_FK)
+            //        .ThenInclude(e => e.OneToMany_Optional)
+            //        .Include(e => e.OneToMany_Optional)
+            //        .ThenInclude(e => e.OneToOne_Optional_FK);
+
+            //    var result = query.ToList();
+
+            //    Assert.Equal(levelOnes.Count, result.Count);
+            //    foreach (var resultItem in result)
+            //    {
+            //        var expectedLevel1 = levelOnes.Where(e => e.Id == resultItem.Id).Single();
+            //        Assert.Equal(expectedLevel1.OneToOne_Optional_FK?.Id, resultItem.OneToOne_Optional_FK?.Id);
+            //        Assert.Equal(expectedLevel1.OneToMany_Optional?.Count, resultItem.OneToMany_Optional?.Count);
+
+            //        var oneToOne_Optional_FK = resultItem.OneToOne_Optional_FK;
+            //        if (oneToOne_Optional_FK != null)
+            //        {
+            //            var expectedReferenceLevel2 = levelTwos.Where(e => e.Id == oneToOne_Optional_FK.Id).Single();
+            //            Assert.Equal(expectedReferenceLevel2.OneToMany_Optional?.Count, oneToOne_Optional_FK.OneToMany_Optional?.Count);
+            //        }
+            //    }
+            //}
         }
 
-        // issue #3180
         [ConditionalFact]
         public virtual void Multiple_complex_includes_self_ref()
         {
-            List<Level1> levelOnes1;
-            List<Level1> levelOnes2;
-            using (var context = CreateContext())
+            var expectedIncludes = new List<IExpectedInclude>
             {
-                levelOnes1 = context.LevelOne.Include(e => e.OneToOne_Optional_Self).ToList();
-                levelOnes2 = context.LevelOne.Include(e => e.OneToMany_Optional_Self).ToList();
-            }
+                new ExpectedInclude<Level1>(l1 => l1.OneToOne_Optional_Self, "OneToOne_Optional_Self"),
+                new ExpectedInclude<Level2>(l2 => l2.OneToMany_Optional_Self, "OneToMany_Optional_Self", navigationPath: "OneToOne_Optional_Self"),
+                new ExpectedInclude<Level1>(l1 => l1.OneToMany_Optional_Self, "OneToMany_Optional_Self"),
+                new ExpectedInclude<Level2>(l2 => l2.OneToOne_Optional_Self, "OneToOne_Optional_Self", navigationPath: "OneToMany_Optional_Self")
+            };
 
-            ClearLog();
-
-            using (var context = CreateContext())
-            {
-                var query = context.LevelOne
+            AssertIncludeQuery<Level1>(
+                l1s => l1s
                     .Include(e => e.OneToOne_Optional_Self)
                     .ThenInclude(e => e.OneToMany_Optional_Self)
                     .Include(e => e.OneToMany_Optional_Self)
-                    .ThenInclude(e => e.OneToOne_Optional_Self);
+                    .ThenInclude(e => e.OneToOne_Optional_Self),
+                    expectedIncludes,
+                    elementSorter: e=> e.Id);
 
-                var result = query.ToList();
+            //List<Level1> levelOnes1;
+            //List<Level1> levelOnes2;
+            //using (var context = CreateContext())
+            //{
+            //    levelOnes1 = context.LevelOne.Include(e => e.OneToOne_Optional_Self).ToList();
+            //    levelOnes2 = context.LevelOne.Include(e => e.OneToMany_Optional_Self).ToList();
+            //}
 
-                foreach (var resultItem in result)
-                {
-                    var expected1 = levelOnes1.Where(e => e.Id == resultItem.Id).Single();
-                    var expected2 = levelOnes2.Where(e => e.Id == resultItem.Id).Single();
+            //ClearLog();
 
-                    Assert.Equal(expected1.OneToOne_Optional_Self?.Id, resultItem.OneToOne_Optional_Self?.Id);
-                    Assert.Equal(expected2.OneToMany_Optional_Self?.Count, resultItem.OneToMany_Optional_Self?.Count);
-                }
-            }
+            //using (var context = CreateContext())
+            //{
+            //    var query = context.LevelOne
+            //        .Include(e => e.OneToOne_Optional_Self)
+            //        .ThenInclude(e => e.OneToMany_Optional_Self)
+            //        .Include(e => e.OneToMany_Optional_Self)
+            //        .ThenInclude(e => e.OneToOne_Optional_Self);
+
+            //    var result = query.ToList();
+
+            //    foreach (var resultItem in result)
+            //    {
+            //        var expected1 = levelOnes1.Where(e => e.Id == resultItem.Id).Single();
+            //        var expected2 = levelOnes2.Where(e => e.Id == resultItem.Id).Single();
+
+            //        Assert.Equal(expected1.OneToOne_Optional_Self?.Id, resultItem.OneToOne_Optional_Self?.Id);
+            //        Assert.Equal(expected2.OneToMany_Optional_Self?.Count, resultItem.OneToMany_Optional_Self?.Count);
+            //    }
+            //}
         }
 
         [ConditionalFact]
         public virtual void Multiple_complex_include_select()
         {
-            List<Level1> levelOnes;
-            List<Level2> levelTwos;
-            using (var context = CreateContext())
+            var expectedIncludes = new List<IExpectedInclude>
             {
-                levelOnes = context.LevelOne
-                    .Include(e => e.OneToOne_Optional_FK)
-                    .Include(e => e.OneToMany_Optional).ToList();
+                new ExpectedInclude<Level1>(l1 => l1.OneToOne_Optional_FK, "OneToOne_Optional_FK"),
+                new ExpectedInclude<Level2>(l2 => l2.OneToMany_Optional, "OneToMany_Optional", navigationPath: "OneToOne_Optional_FK"),
+                new ExpectedInclude<Level1>(l1 => l1.OneToMany_Optional, "OneToMany_Optional"),
+                new ExpectedInclude<Level2>(l2 => l2.OneToOne_Optional_FK, "OneToOne_Optional_FK", navigationPath: "OneToMany_Optional")
+            };
 
-                levelTwos = context.LevelTwo
-                    .Include(e => e.OneToMany_Optional)
-                    .Include(e => e.OneToOne_Optional_FK).ToList();
-            }
-
-            ClearLog();
-
-            using (var context = CreateContext())
-            {
-                var query = context.LevelOne
+            AssertIncludeQuery<Level1>(
+                l1s => l1s
                     .Select(e => e)
                     .Include(e => e.OneToOne_Optional_FK)
                     .ThenInclude(e => e.OneToMany_Optional)
                     .Select(e => e)
                     .Include(e => e.OneToMany_Optional)
-                    .ThenInclude(e => e.OneToOne_Optional_FK);
+                    .ThenInclude(e => e.OneToOne_Optional_FK),
+                expectedIncludes,
+                elementSorter: e => e.Id);
 
-                var result = query.ToList();
+            //List<Level1> levelOnes;
+            //List<Level2> levelTwos;
+            //using (var context = CreateContext())
+            //{
+            //    levelOnes = context.LevelOne
+            //        .Include(e => e.OneToOne_Optional_FK)
+            //        .Include(e => e.OneToMany_Optional).ToList();
 
-                Assert.Equal(levelOnes.Count, result.Count);
-                foreach (var resultItem in result)
-                {
-                    var expectedLevel1 = levelOnes.Where(e => e.Id == resultItem.Id).Single();
-                    Assert.Equal(expectedLevel1.OneToOne_Optional_FK?.Id, resultItem.OneToOne_Optional_FK?.Id);
-                    Assert.Equal(expectedLevel1.OneToMany_Optional?.Count, resultItem.OneToMany_Optional?.Count);
+            //    levelTwos = context.LevelTwo
+            //        .Include(e => e.OneToMany_Optional)
+            //        .Include(e => e.OneToOne_Optional_FK).ToList();
+            //}
 
-                    var oneToOne_Optional_FK = resultItem.OneToOne_Optional_FK;
-                    if (oneToOne_Optional_FK != null)
-                    {
-                        var expectedReferenceLevel2 = levelTwos.Where(e => e.Id == oneToOne_Optional_FK.Id).Single();
-                        Assert.Equal(expectedReferenceLevel2.OneToMany_Optional?.Count, oneToOne_Optional_FK.OneToMany_Optional?.Count);
-                    }
-                }
-            }
+            //ClearLog();
+
+            //using (var context = CreateContext())
+            //{
+            //    var query = context.LevelOne
+            //        .Select(e => e)
+            //        .Include(e => e.OneToOne_Optional_FK)
+            //        .ThenInclude(e => e.OneToMany_Optional)
+            //        .Select(e => e)
+            //        .Include(e => e.OneToMany_Optional)
+            //        .ThenInclude(e => e.OneToOne_Optional_FK);
+
+            //    var result = query.ToList();
+
+            //    Assert.Equal(levelOnes.Count, result.Count);
+            //    foreach (var resultItem in result)
+            //    {
+            //        var expectedLevel1 = levelOnes.Where(e => e.Id == resultItem.Id).Single();
+            //        Assert.Equal(expectedLevel1.OneToOne_Optional_FK?.Id, resultItem.OneToOne_Optional_FK?.Id);
+            //        Assert.Equal(expectedLevel1.OneToMany_Optional?.Count, resultItem.OneToMany_Optional?.Count);
+
+            //        var oneToOne_Optional_FK = resultItem.OneToOne_Optional_FK;
+            //        if (oneToOne_Optional_FK != null)
+            //        {
+            //            var expectedReferenceLevel2 = levelTwos.Where(e => e.Id == oneToOne_Optional_FK.Id).Single();
+            //            Assert.Equal(expectedReferenceLevel2.OneToMany_Optional?.Count, oneToOne_Optional_FK.OneToMany_Optional?.Count);
+            //        }
+            //    }
+            //}
         }
 
         [ConditionalFact]
@@ -1573,33 +1592,44 @@ namespace Microsoft.EntityFrameworkCore.Specification.Tests
         [ConditionalFact]
         public virtual void Include_with_optional_navigation()
         {
-            List<Level1> expected;
-            using (var context = CreateContext())
-            {
-                expected = (from l1 in context.LevelOne.Include(e => e.OneToOne_Optional_FK).ToList()
-                            where l1.OneToOne_Optional_FK?.Name != "L2 05"
-                            select l1).ToList();
-            }
+            AssertIncludeQuery<Level1>(
+                l1s => from l1 in l1s.Include(e => e.OneToOne_Optional_FK)
+                       where l1.OneToOne_Optional_FK.Name != "L2 05"
+                       select l1,
+                l1s => from l1 in l1s.Include(e => e.OneToOne_Optional_FK)
+                       where Maybe(l1.OneToOne_Optional_FK, () => l1.OneToOne_Optional_FK.Name) != "L2 05"
+                       select l1,
+                new List<IExpectedInclude> { new ExpectedInclude<Level1>(l1 => l1.OneToOne_Optional_FK, "OneToOne_Optional_FK") },
+                elementSorter: e => e.Id);
 
-            ClearLog();
 
-            using (var context = CreateContext())
-            {
-                var query = from l1 in context.LevelOne.Include(e => e.OneToOne_Optional_FK)
-                            where l1.OneToOne_Optional_FK.Name != "L2 05"
-                            select l1;
+            //List<Level1> expected;
+            //using (var context = CreateContext())
+            //{
+            //    expected = (from l1 in context.LevelOne.Include(e => e.OneToOne_Optional_FK).ToList()
+            //                where l1.OneToOne_Optional_FK?.Name != "L2 05"
+            //                select l1).ToList();
+            //}
 
-                var result = query.ToList();
+            //ClearLog();
 
-                Assert.Equal(expected.Count, result.Count);
-                foreach (var resultItem in result)
-                {
-                    var expectedElement = expected.Where(e => e.Id == resultItem.Id).Single();
+            //using (var context = CreateContext())
+            //{
+            //    var query = from l1 in context.LevelOne.Include(e => e.OneToOne_Optional_FK)
+            //                where l1.OneToOne_Optional_FK.Name != "L2 05"
+            //                select l1;
 
-                    Assert.Equal(expectedElement.OneToOne_Optional_FK?.Id, resultItem.OneToOne_Optional_FK?.Id);
-                    Assert.Equal(expectedElement.OneToOne_Optional_FK?.Name, resultItem.OneToOne_Optional_FK?.Name);
-                }
-            }
+            //    var result = query.ToList();
+
+            //    Assert.Equal(expected.Count, result.Count);
+            //    foreach (var resultItem in result)
+            //    {
+            //        var expectedElement = expected.Where(e => e.Id == resultItem.Id).Single();
+
+            //        Assert.Equal(expectedElement.OneToOne_Optional_FK?.Id, resultItem.OneToOne_Optional_FK?.Id);
+            //        Assert.Equal(expectedElement.OneToOne_Optional_FK?.Name, resultItem.OneToOne_Optional_FK?.Name);
+            //    }
+            //}
         }
 
         [ConditionalFact]
@@ -3225,7 +3255,7 @@ namespace Microsoft.EntityFrameworkCore.Specification.Tests
                     .Where(l1 => l2s.OrderBy(l2i => l2i.Id).First().OneToOne_Required_FK_Inverse.Name == "L1 02"));
         }
 
-        ////[ConditionalFact] issue #7761
+        [ConditionalFact(Skip = "issue #7761")]
         public virtual void GroupJoin_with_complex_subquery_with_joins_does_not_get_flattened()
         {
             using (var ctx = CreateContext())
@@ -3281,7 +3311,7 @@ namespace Microsoft.EntityFrameworkCore.Specification.Tests
                     select subquery.Id);
         }
 
-        ////[ConditionalFact] issue #7770
+        [ConditionalFact(Skip = "issue #4311")]
         public virtual void GroupJoin_on_a_subquery_containing_another_GroupJoin_projecting_outer()
         {
             using (var ctx = CreateContext())
@@ -3299,7 +3329,7 @@ namespace Microsoft.EntityFrameworkCore.Specification.Tests
             }
         }
 
-        ////[ConditionalFact] issue #7770
+        [ConditionalFact(Skip = "issue #4311")]
         public virtual void GroupJoin_on_a_subquery_containing_another_GroupJoin_projecting_outer_with_client_method()
         {
             using (var ctx = CreateContext())
@@ -3322,7 +3352,7 @@ namespace Microsoft.EntityFrameworkCore.Specification.Tests
             return arg;
         }
 
-        ////[ConditionalFact] issue #7770
+        [ConditionalFact(Skip = "issue #4311")]
         public virtual void GroupJoin_on_a_subquery_containing_another_GroupJoin_projecting_inner()
         {
             using (var ctx = CreateContext())
@@ -4249,15 +4279,12 @@ namespace Microsoft.EntityFrameworkCore.Specification.Tests
         {
             using (var context = CreateContext())
             {
-                var actual = efQuery(context.Set<TItem1>()).ToArray();
-                var expected = l2oQuery(ComplexNavigationsData.Set<TItem1>()).ToArray();
-                new ResultsAsserter().AssertCollections(expected, actual);
-                //TestHelpers.AssertResults(
-                //    l2oQuery(ComplexNavigationsData.Set<TItem1>()).ToArray(),
-                //    efQuery(context.Set<TItem1>()).ToArray(),
-                //    elementSorter ?? (e => e),
-                //    elementAsserter ?? ((e, a) => Assert.Equal(e, a)),
-                //    verifyOrdered);
+                TestHelpers.AssertResults(
+                    l2oQuery(ComplexNavigationsData.Set<TItem1>()).ToArray(),
+                    efQuery(context.Set<TItem1>()).ToArray(),
+                    elementSorter ?? (e => e),
+                    elementAsserter ?? ((e, a) => Assert.Equal(e, a)),
+                    verifyOrdered);
             }
         }
 
@@ -4281,16 +4308,12 @@ namespace Microsoft.EntityFrameworkCore.Specification.Tests
         {
             using (var context = CreateContext())
             {
-                var actual = efQuery(context.Set<TItem1>(), context.Set<TItem2>()).ToArray();
-                var expected = l2oQuery(ComplexNavigationsData.Set<TItem1>(), ComplexNavigationsData.Set<TItem2>()).ToArray();
-                new ResultsAsserter().AssertCollections(expected, actual);
-
-                //TestHelpers.AssertResults(
-                //    l2oQuery(ComplexNavigationsData.Set<TItem1>(), ComplexNavigationsData.Set<TItem2>()).ToArray(),
-                //    efQuery(context.Set<TItem1>(), context.Set<TItem2>()).ToArray(),
-                //    elementSorter ?? (e => e),
-                //    elementAsserter ?? ((e, a) => Assert.Equal(e, a)),
-                //    verifyOrdered);
+                TestHelpers.AssertResults(
+                    l2oQuery(ComplexNavigationsData.Set<TItem1>(), ComplexNavigationsData.Set<TItem2>()).ToArray(),
+                    efQuery(context.Set<TItem1>(), context.Set<TItem2>()).ToArray(),
+                    elementSorter ?? (e => e),
+                    elementAsserter ?? ((e, a) => Assert.Equal(e, a)),
+                    verifyOrdered);
             }
         }
 
@@ -4316,16 +4339,109 @@ namespace Microsoft.EntityFrameworkCore.Specification.Tests
         {
             using (var context = CreateContext())
             {
-                var actual = efQuery(context.Set<TItem1>(), context.Set<TItem2>(), context.Set<TItem3>()).ToArray();
-                var expected = l2oQuery(ComplexNavigationsData.Set<TItem1>(), ComplexNavigationsData.Set<TItem2>(), ComplexNavigationsData.Set<TItem3>()).ToArray();
-                new ResultsAsserter().AssertCollections(expected, actual);
+                TestHelpers.AssertResults(
+                    l2oQuery(ComplexNavigationsData.Set<TItem1>(), ComplexNavigationsData.Set<TItem2>(), ComplexNavigationsData.Set<TItem3>()).ToArray(),
+                    efQuery(context.Set<TItem1>(), context.Set<TItem2>(), context.Set<TItem3>()).ToArray(),
+                    elementSorter ?? (e => e),
+                    elementAsserter ?? ((e, a) => Assert.Equal(e, a)),
+                    verifyOrdered);
+            }
+        }
 
-                //TestHelpers.AssertResults(
-                //    l2oQuery(ComplexNavigationsData.Set<TItem1>(), ComplexNavigationsData.Set<TItem2>(), ComplexNavigationsData.Set<TItem3>()).ToArray(),
-                //    efQuery(context.Set<TItem1>(), context.Set<TItem2>(), context.Set<TItem3>()).ToArray(),
-                //    elementSorter ?? (e => e),
-                //    elementAsserter ?? ((e, a) => Assert.Equal(e, a)),
-                //    verifyOrdered);
+        #endregion
+
+        #region AssertIncludeQuery
+
+        private void AssertIncludeQuery<TItem1>(
+            Func<IQueryable<TItem1>, IQueryable<object>> query,
+            List<IExpectedInclude> expectedIncludes,
+            Func<dynamic, object> elementSorter = null)
+            where TItem1 : class
+            => AssertIncludeQuery(query, query, expectedIncludes, elementSorter);
+
+        private void AssertIncludeQuery<TItem1>(
+            Func<IQueryable<TItem1>, IQueryable<object>> efQuery,
+            Func<IQueryable<TItem1>, IQueryable<object>> l2oQuery,
+            List<IExpectedInclude> expectedIncludes,
+            Func<dynamic, object> elementSorter = null)
+            where TItem1 : class
+        {
+            using (var context = CreateContext())
+            {
+                var actual = efQuery(context.Set<TItem1>()).ToList();
+                var expected = l2oQuery(ComplexNavigationsData.Set<TItem1>()).ToList();
+
+                if (elementSorter != null)
+                {
+                    actual = actual.OrderBy(elementSorter).ToList();
+                    expected = expected.OrderBy(elementSorter).ToList();
+                }
+
+                ResultAsserter.AssertResult(expected, actual, expectedIncludes);
+            }
+        }
+
+        private void AssertIncludeQuery<TItem1, TItem2>(
+            Func<IQueryable<TItem1>, IQueryable<TItem2>, IQueryable<object>> query,
+            List<IExpectedInclude> expectedIncludes,
+            Func<dynamic, object> elementSorter = null)
+            where TItem1 : class
+            where TItem2 : class
+            => AssertIncludeQuery(query, query, expectedIncludes, elementSorter);
+
+        private void AssertIncludeQuery<TItem1, TItem2>(
+            Func<IQueryable<TItem1>, IQueryable<TItem2>, IQueryable<object>> efQuery,
+            Func<IQueryable<TItem1>, IQueryable<TItem2>, IQueryable<object>> l2oQuery,
+            List<IExpectedInclude> expectedIncludes,
+            Func<dynamic, object> elementSorter = null)
+            where TItem1 : class
+            where TItem2 : class
+        {
+            using (var context = CreateContext())
+            {
+                var actual = efQuery(context.Set<TItem1>(), context.Set<TItem2>()).ToList();
+                var expected = l2oQuery(ComplexNavigationsData.Set<TItem1>(), ComplexNavigationsData.Set<TItem2>()).ToList();
+
+                if (elementSorter != null)
+                {
+                    actual = actual.OrderBy(elementSorter).ToList();
+                    expected = expected.OrderBy(elementSorter).ToList();
+                }
+
+                ResultAsserter.AssertResult(expected, actual, expectedIncludes);
+            }
+        }
+
+        private void AssertIncludeQuery<TItem1, TItem2, TItem3>(
+            Func<IQueryable<TItem1>, IQueryable<TItem2>, IQueryable<TItem3>, IQueryable<object>> query,
+            List<IExpectedInclude> expectedIncludes,
+            Func<dynamic, object> elementSorter = null)
+            where TItem1 : class
+            where TItem2 : class
+            where TItem3 : class
+            => AssertIncludeQuery(query, query, expectedIncludes, elementSorter);
+
+        private void AssertIncludeQuery<TItem1, TItem2, TItem3>(
+            Func<IQueryable<TItem1>, IQueryable<TItem2>, IQueryable<TItem3>, IQueryable<object>> efQuery,
+            Func<IQueryable<TItem1>, IQueryable<TItem2>, IQueryable<TItem3>, IQueryable<object>> l2oQuery,
+            List<IExpectedInclude> expectedIncludes,
+            Func<dynamic, object> elementSorter = null)
+            where TItem1 : class
+            where TItem2 : class
+            where TItem3 : class
+        {
+            using (var context = CreateContext())
+            {
+                var actual = efQuery(context.Set<TItem1>(), context.Set<TItem2>(), context.Set<TItem3>()).ToList();
+                var expected = l2oQuery(ComplexNavigationsData.Set<TItem1>(), ComplexNavigationsData.Set<TItem2>(), ComplexNavigationsData.Set<TItem3>()).ToList();
+
+                if (elementSorter != null)
+                {
+                    actual = actual.OrderBy(elementSorter).ToList();
+                    expected = expected.OrderBy(elementSorter).ToList();
+                }
+
+                ResultAsserter.AssertResult(expected, actual, expectedIncludes);
             }
         }
 
@@ -4482,62 +4598,152 @@ namespace Microsoft.EntityFrameworkCore.Specification.Tests
 
         #endregion
 
-        private class ResultsAsserter
+        private class ComplexNavigationsQueryResultAsserter : QueryResultAsserter
         {
-            public virtual bool AssertCollections<TElement>(IList<TElement> expected, IList<TElement> actual, bool verifyOrder = true)
+            protected override void AssertCollection<TElement>(IEnumerable<TElement> expected, IEnumerable<TElement> actual, IEnumerable<IExpectedInclude> expectedIncludes)
             {
-                if (expected == null && actual == null)
+                if (expected != null && actual != null)
                 {
-                    return true;
-                }
-
-                if ((expected == null) != (actual == null))
-                {
-                    return false;
-                }
-
-                if (expected.Count != actual.Count)
-                {
-                    return false;
-                }
-
-                if (verifyOrder)
-                {
-                    for (int i = 0; i < expected.Count; i++)
+                    if ((object)expected is IEnumerable<Level1> expectedLevel1 && (object)actual is IEnumerable<Level1> actualLevel1)
                     {
-                        var result = AssertElements(expected[i], actual[i]);
-                        if (!result)
+                        var expectedListLevel1 = _path.Any() ? expectedLevel1.OrderBy(l1 => l1.Id).ToList() : expectedLevel1.ToList();
+                        var actualListLevel1 = _path.Any() ? actualLevel1.OrderBy(l1 => l1.Id).ToList() : actualLevel1.ToList();
+
+                        for (int i = 0; i < expectedListLevel1.Count; i++)
                         {
-                            return false;
+                            _fullPath.Push("[" + i + "]");
+                            AssertLevel1(expectedListLevel1[i], actualListLevel1[i], expectedIncludes);
+                            _fullPath.Pop();
                         }
+
+                        return;
+                    }
+
+                    if ((object)expected is IEnumerable<Level2> expectedLevel2 && (object)actual is IEnumerable<Level2> actualLevel2)
+                    {
+                        var expectedListLevel2 = _path.Any() ? expectedLevel2.OrderBy(l2 => l2.Id).ToList() : expectedLevel2.ToList();
+                        var actualListLevel2 = _path.Any() ? actualLevel2.OrderBy(l2 => l2.Id).ToList() : actualLevel2.ToList();
+
+                        for (int i = 0; i < expectedListLevel2.Count; i++)
+                        {
+                            _fullPath.Push("[" + i + "]");
+                            AssertLevel2(expectedListLevel2[i], actualListLevel2[i], expectedIncludes);
+                            _fullPath.Pop();
+                        }
+
+                        return;
+                    }
+
+                    if ((object)expected is IEnumerable<Level3> expectedLevel3 && (object)actual is IEnumerable<Level3> actualLevel3)
+                    {
+                        var expectedListLevel3 = _path.Any() ? expectedLevel3.OrderBy(l3 => l3.Id).ToList() : expectedLevel3.ToList();
+                        var actualListLevel3 = _path.Any() ? actualLevel3.OrderBy(l3 => l3.Id).ToList() : actualLevel3.ToList();
+
+                        for (int i = 0; i < expectedListLevel3.Count; i++)
+                        {
+                            _fullPath.Push("[" + i + "]");
+                            AssertLevel3(expectedListLevel3[i], actualListLevel3[i], expectedIncludes);
+                            _fullPath.Pop();
+                        }
+
+                        return;
+                    }
+
+                    if ((object)expected is IEnumerable<Level4> expectedLevel4 && (object)actual is IEnumerable<Level4> actualLevel4)
+                    {
+                        List<Level4> expectedListLevel4 = _path.Any() ? expectedLevel4.OrderBy(l4 => l4.Id).ToList() : expectedLevel4.ToList();
+                        List<Level4> actualListLevel4 = _path.Any() ? actualLevel4.OrderBy(l4 => l4.Id).ToList() : actualLevel4.ToList();
+
+                        for (int i = 0; i < expectedListLevel4.Count; i++)
+                        {
+                            _fullPath.Push("[" + i + "]");
+                            AssertLevel4(expectedListLevel4[i], actualListLevel4[i], expectedIncludes);
+                            _fullPath.Pop();
+                        }
+
+                        return;
                     }
                 }
-                else
-                {
-                    //todo
-                }
 
-                return true;
+                base.AssertCollection(expected, actual, expectedIncludes);
             }
 
-            public virtual bool AssertElements<TElement>(TElement expected, TElement actual)
+            protected override void AssertElement<TElement>(TElement expected, TElement actual, IEnumerable<IExpectedInclude> expectedIncludes)
             {
-                if (expected == null && actual == null)
+                if (expected != null && actual != null)
                 {
-                    return true;
+                    Assert.Equal(expected.GetType(), actual.GetType());
+
+                    if ((object)expected is Level1 expectedLevel1)
+                    {
+                        AssertLevel1(expectedLevel1, (Level1)(object)actual, expectedIncludes);
+
+                        return;
+                    }
+
+                    if ((object)expected is Level2 expectedLevel2)
+                    {
+                        AssertLevel2(expectedLevel2, (Level2)(object)actual, expectedIncludes);
+
+                        return;
+                    }
+
+                    if ((object)expected is Level3 expectedLevel3)
+                    {
+                        AssertLevel3(expectedLevel3, (Level3)(object)actual, expectedIncludes);
+
+                        return;
+                    }
+
+                    if ((object)expected is Level4 expectedLevel4)
+                    {
+                        AssertLevel4(expectedLevel4, (Level4)(object)actual, expectedIncludes);
+
+                        return;
+                    }
                 }
 
-                if ((expected == null) != (actual == null))
-                {
-                    return false;
-                }
+                base.AssertElement(expected, actual, expectedIncludes);
+            }
 
-                if (expected.GetType() != actual.GetType())
-                {
-                    return false;
-                }
+            private void AssertLevel1(Level1 expected, Level1 actual, IEnumerable<IExpectedInclude> expectedIncludes)
+            {
+                Assert.Equal(expected.Id, actual.Id);
+                Assert.Equal(expected.Name, actual.Name);
+                Assert.Equal(expected.Date, actual.Date);
 
-                return expected.Equals(actual);
+                ProcessIncludes(expected, actual, expectedIncludes);
+            }
+
+            private void AssertLevel2(Level2 expected, Level2 actual, IEnumerable<IExpectedInclude> expectedIncludes)
+            {
+                Assert.Equal(expected.Id, actual.Id);
+                Assert.Equal(expected.Name, actual.Name);
+                Assert.Equal(expected.Date, actual.Date);
+                Assert.Equal(expected.Level1_Optional_Id, actual.Level1_Optional_Id);
+                Assert.Equal(expected.Level1_Required_Id, actual.Level1_Required_Id);
+
+                ProcessIncludes(expected, actual, expectedIncludes);
+            }
+
+            private void AssertLevel3(Level3 expected, Level3 actual, IEnumerable<IExpectedInclude> expectedIncludes)
+            {
+                Assert.Equal(expected.Id, actual.Id);
+                Assert.Equal(expected.Name, actual.Name);
+                Assert.Equal(expected.Level2_Optional_Id, actual.Level2_Optional_Id);
+                Assert.Equal(expected.Level2_Required_Id, actual.Level2_Required_Id);
+
+                ProcessIncludes(expected, actual, expectedIncludes);
+            }
+
+            private void AssertLevel4(Level4 expected, Level4 actual, IEnumerable<IExpectedInclude> expectedIncludes)
+            {
+                Assert.Equal(expected.Id, actual.Id);
+                Assert.Equal(expected.Name, actual.Name);
+                Assert.Equal(expected.Level3_Optional_Id, actual.Level3_Optional_Id);
+                Assert.Equal(expected.Level3_Required_Id, actual.Level3_Required_Id);
+
+                ProcessIncludes(expected, actual, expectedIncludes);
             }
         }
     }
